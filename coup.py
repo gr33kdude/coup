@@ -104,7 +104,10 @@ class Action(enum.IntEnum):
             source.money += 3
             game.bank -= 3
         elif self == Action.assassinate:
-            pass
+            source.money -= 3
+            game.bank += 3
+
+            target.kill()
         elif self == Action.steal:
             steal_amt = max(target.money, 2)
             source.money += steal_amt
@@ -149,10 +152,11 @@ class Action(enum.IntEnum):
         return names[self.action]
 
 class Player:
-    def __init__(self, name):
+    def __init__(self, name, id):
         self.name = name
         self.money = 2
         self.roles = []
+        self.id = id
 
     def alive(self):
         lives = map(Role.hidden, self.roles)
@@ -167,7 +171,7 @@ class Player:
         else:
             influence = lives[0]
 
-        influence.hide()
+        influence.reveal()
 
     def __str__(self):
         return self.name
@@ -177,6 +181,8 @@ class Player:
 
         if not self.alive():
             r = "~~ {} ~~".format(r)
+
+        r = "{{{}}} {}".format(self.id, r)
 
         return r
 
@@ -198,8 +204,8 @@ class Role:
     def hidden(self):
         return self.hidden
 
-    def hide(self):
-        self.hidden = True
+    def reveal(self):
+        self.hidden = False
 
     def __init__(self, role):
         self.hidden = True
@@ -219,6 +225,9 @@ class Game:
         self.bank = 60
         self.game_over = False
         self.players = []
+        self.cpi = -1 # current player index
+        self.current = None
+        self.status = ""
 
         self.deck = map(Role, [ Role.duke, Role.assassin, Role.captain, Role.ambassador, Role.contessa ] * 3)
         random.shuffle(self.deck)
@@ -242,6 +251,11 @@ class Game:
     def prepare_player(self, player):
         clear_screen()
 
+        if self.status != "":
+            #print "=== Status Message ==="
+            print self.status
+            self.status = ""
+
         print "=== Game State ==="
         print self
 
@@ -255,11 +269,13 @@ class Game:
     def play_turn(self, player):
         pass
 
+    def next_player(self):
+        self.cpi = (self.cpi + 1) % len(self.players)
+        self.current = self.players[self.cpi]
 
     # how should this be structured in order to accommodate an AI?
     # players in a game should be represented using an ID that does not change
     # 
-
     def start(self):
         if not 2 <= len(self.players) <= 6:
             print "Invalid number of players ({})! Game only supports between 2-6 players.".format(len(self.players))
@@ -268,59 +284,67 @@ class Game:
         print "Welcome to Coup!!"
         print
 
+        # prepare for the first turn
+        self.next_player()
+
         while not self.game_over:
-            if not any(map(Player.alive, self.players)):
+            alive = filter(Player.alive, self.players)
+
+            if len(alive) <= 1:
                 self.game_over = True
                 continue
 
-            for player in self.players:
-                if not player.alive():
-                    print "Skipping player {} (dead)".format(player)
-                    continue
+            if not self.current.alive():
+                self.next_player()
+                continue
 
-                self.prepare_player(player)
+            self.prepare_player(self.current)
 
-                # request player action
-                chosen_action = raw_input("Choose an action: ").rstrip("\n")
-                if chosen_action == "q" or chosen_action == "quit" or chosen_action == "exit":
-                   game_over = True
-                   break
+            # request player action
+            chosen_action = raw_input("Choose an action: ").rstrip("\n")
+            if chosen_action == "q" or chosen_action == "quit" or chosen_action == "exit":
+               game_over = True
+               break
 
-                try:
-                    if chosen_action == "":
-                        raise Exception()
+            try:
+                if chosen_action == "":
+                    raise Exception()
 
-                    action = Action(int(chosen_action))
-                except Exception:
-                    print "Invalid action, please try again"
-                    continue
+                action = Action(int(chosen_action))
+            except Exception:
+                self.status += "Invalid action, please try again\n"
+                continue
 
-                print "{} chooses action {}".format(player, action)
+            print "{} chooses action {}".format(self.current, action)
 
-                # TODO: manage non-game actions (quit/exit) uniformly?
-                # Should we just have action modify the game state directly if it succeeds?
-                # Meld into same framework?
+            # TODO: manage non-game actions (quit/exit) uniformly?
+            # Should we just have action modify the game state directly if it succeeds?
+            # Meld into same framework?
 
-                target = None
-                if action.requires_target():
-                    valid_players = filter(lambda p: p != player, filter(Player.alive, self.players))
-                    target = choose(valid_players, "Which player will you target?")
+            target = None
+            if action.requires_target():
+                valid_players = filter(lambda p: p != self.current, filter(Player.alive, self.players))
+                target = choose(valid_players, "Which player will you target?")
 
-                    print target
+                print target
 
-                if not action.valid(self, player, target):
-                    print "Invalid action, please try again"
-                    continue
+            if not action.valid(self, self.current, target):
+                self.status += "Invalid action, please try again\n"
+                continue
+        
+            '''
+            # resolve challenges if possible
+            challenger = None
+            if action.can_challenge():
+                challenger = challenge(self.players, self.current)
             
-                # resolve challenges if possible
-                challenger = None
-                if action.can_challenge():
-                    challenger = challenge(self.players, player)
-                
-                if challenger != None:
-                    print "{}, {} would like to challenge your action!".format(player, challenger)
+            if challenger != None:
+                print "{}, {} would like to challenge your action!".format(self.current, challenger)
+            '''
 
-                action.apply(self, player, target)
+            action.apply(self, self.current, target)
+
+            self.next_player()
 
         return True
 
@@ -328,15 +352,21 @@ class Game:
         s = ""
 
         s += "Players:\n"
-        for p in self.players:
-            s += "\t{}\n".format(repr(p))
+        for i, p in enumerate(self.players):
+            s += "\t"
+            s += "=> " if p == self.current else "   "
+            s += repr(p)
+            s += "\n"
 
         s += "Deck: {}\n".format(self.deck)
 
         return s
 
 def main():
-    players = [ Player("Costas"), Player("Cam"), Player("Jeff") ]
+    players = []
+    player_names = [ "Costas", "Cam", "Jeff" ]
+    for i, name in enumerate(player_names):
+        players.append( Player(name, i + 1) )
 
     g = Game()
     map(g.add, players)
