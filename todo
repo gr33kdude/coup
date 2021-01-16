@@ -1,3 +1,9 @@
 get a game working so we can play, then focus on refactoring
 
 keep the player order constant from a UI perspective; this is also important for player IDs to take in inputs from AI
+
+
+
+
+Let's make a small UI using the browser
+Change the game program to be a server, and respond to particular web API calls
