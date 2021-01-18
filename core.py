@@ -1,139 +1,57 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
+from math import ceil, log10
 import enum
 
-class Action(enum.IntEnum):
-    income = 1
-    foreign_aid = 2
-    coup = 3
-    tax = 4
-    assassinate = 5
-    steal = 6
-    swap = 7
+class Role(enum.IntEnum):
+    DUKE = 1
+    ASSASSIN = 2
+    CAPTAIN = 3
+    AMBASSADOR = 4
+    CONTESSA = 5
 
-    def __init__(self, action):
-        self.action = action
-
-    def can_challenge(self):
-        return self.action not in [Action.income, Action.coup]
-
-    def requires_target(self):
-        return self.action in [Action.coup, Action.assassinate, Action.steal]
-
-    # source : Player
-    # target : Player
-    def apply(self, game, source, target):
-        if self == Action.income:
-            source.money += 1
-            game.bank -= 1
-        elif self == Action.foreign_aid:
-            source.money += 2
-            game.bank -= 2
-        elif self == Action.coup:
-            source.money -= 7
-            game.bank += 7
-
-            target.kill()
-        elif self == Action.tax:
-            source.money += 3
-            game.bank -= 3
-        elif self == Action.assassinate:
-            source.money -= 3
-            game.bank += 3
-
-            target.kill()
-        elif self == Action.steal:
-            steal_amt = max(target.money, 2)
-            source.money += steal_amt
-            target.money -= steal_amt
-        elif self == Action.swap:
-            pass
-        else:
-            pass
-
-    def valid(self, game, source, target):
-        if source.money >= 10 and self != Action.coup:
-            return False
-
-        if self == Action.income:
-            return game.bank >= 1
-        elif self == Action.foreign_aid:
-            return game.bank >= 2
-        elif self == Action.coup:
-            return source.money >= 7
-        elif self == Action.tax:
-            return game.bank >= 3
-        elif self == Action.assassinate:
-            return target.alive()
-        elif self == Action.steal:
-            return target.money > 0
-        elif self == Action.swap:
+    def can_perform(self, action):
+        if action in [Action.INCOME, Action.FOREIGN_AID, Action.COUP]:
             return True
 
-        return True
-
-    def __str__(self):
-        names = {
-            Action.income:         "Income",
-            Action.foreign_aid:    "Foreign Aid",
-            Action.coup:           "Coup",
-            Action.tax:            "Tax",
-            Action.assassinate:    "Assassinate",
-            Action.steal:          "Steal",
-            Action.swap:           "Swap",
+        allowed = {
+            Role.DUKE: Action.TAX,
+            Role.ASSASSIN: Action.ASSASSINATE,
+            Role.CAPTAIN: Action.STEAL,
+            Role.AMBASSADOR: Action.SWAP,
+            Role.CONTESSA: None,
         }
-        
-        return names[self.action]
+        return action == allowed[self]
 
-class Player:
-    def __init__(self, name, id):
-        self.name = name
-        self.money = 2
-        self.roles = []
-        self.id = id
+    def can_block(self, action):
+        if action in [Action.INCOME, Action.COUP]:
+            return False
 
-    def alive(self):
-        lives = map(Role.hidden, self.roles)
-        # the player is alive if any role is still hidden
-        return any(lives)
-
-    def kill(self):
-        assert self.alive()
-        lives = filter(Role.hidden, self.roles)
-        if len(lives) > 1:
-            influence = choose(lives, "Which role would you like to reveal?")
-        else:
-            influence = lives[0]
-
-        influence.reveal()
+        blocked = {
+            Role.DUKE: Action.FOREIGN_AID,
+            Role.ASSASSIN: None,
+            Role.CAPTAIN: Action.STEAL,
+            Role.AMBASSADOR: Action.STEAL,
+            Role.CONTESSA: Action.ASSASSINATE,
+        }
+        return action == blocked[self]
 
     def __str__(self):
-        return self.name
+        return {
+            Role.DUKE:       "Duke",
+            Role.ASSASSIN:   "Assassin",
+            Role.CAPTAIN:    "Captain",
+            Role.AMBASSADOR: "Ambassador",
+            Role.CONTESSA:   "Contessa",
+        } [self]
 
     def __repr__(self):
-        r = "{} ({}): {}".format(self.name, self.money, ", ".join(map(str, self.roles)))
+        return self.__str__()
 
-        if not self.alive():
-            r = "~~ {} ~~".format(r)
-
-        r = "{{{}}} {}".format(self.id, r)
-
-        return r
-
-class Role:
-    duke = 1
-    assassin = 2
-    captain = 3
-    ambassador = 4
-    contessa = 5
-
-    names = {
-        duke:       "Duke",
-        assassin:   "Assassin",
-        captain:    "Captain",
-        ambassador: "Ambassador",
-        contessa:   "Contessa",
-    }
+class Influence:
+    def __init__(self, role):
+        self.hidden = True
+        self.role = role
 
     def hidden(self):
         return self.hidden
@@ -141,14 +59,124 @@ class Role:
     def reveal(self):
         self.hidden = False
 
-    def __init__(self, role):
-        self.hidden = True
-        self.role = role
-
     def __str__(self):
-        name = Role.names[self.role]
+        name = str(self.role)
         return "[" + name + "]" if self.hidden else name
 
     def __repr__(self):
         return self.__str__()
 
+class Action(enum.IntEnum):
+    INCOME = 1
+    FOREIGN_AID = 2
+    COUP = 3
+    TAX = 4
+    ASSASSINATE = 5
+    STEAL = 6
+    SWAP = 7
+
+    def can_challenge(self):
+        return self not in [Action.INCOME, Action.COUP]
+
+    def requires_target(self):
+        return self in [Action.COUP, Action.ASSASSINATE, Action.STEAL]
+
+    # source : Player
+    # target : Player
+    def apply(self, game, source, target):
+        if self == Action.INCOME:
+            source.money += 1
+            game.bank -= 1
+        elif self == Action.FOREIGN_AID:
+            source.money += 2
+            game.bank -= 2
+        elif self == Action.COUP:
+            source.money -= 7
+            game.bank += 7
+
+            # TODO: THIS IS BROKEN
+            target.kill()
+        elif self == Action.TAX:
+            source.money += 3
+            game.bank -= 3
+        elif self == Action.ASSASSINATE:
+            source.money -= 3
+            game.bank += 3
+
+            target.kill()
+        elif self == Action.STEAL:
+            steal_amt = max(target.money, 2)
+            source.money += steal_amt
+            target.money -= steal_amt
+        elif self == Action.SWAP:
+            pass
+        else:
+            raise Exception()
+
+    def valid(self, game, source, target):
+        if source.money >= 10 and self != Action.COUP:
+            return False
+
+        if self == Action.INCOME:
+            return game.bank >= 1 # due to game design, always True
+        elif self == Action.FOREIGN_AID:
+            return game.bank >= 2 # due to game design, always True
+        elif self == Action.COUP:
+            return source.money >= 7
+        elif self == Action.TAX:
+            return game.bank >= 3 # due to game design, always True
+        elif self == Action.ASSASSINATE:
+            if source.money < 3:
+                return False
+            if target:
+                return target.alive()
+        elif self == Action.STEAL:
+            if target:
+                return target.money >= 0
+        elif self == Action.SWAP:
+            return True
+
+        return True
+
+    def __str__(self):
+        return {
+            Action.INCOME:         "Income",
+            Action.FOREIGN_AID:    "Foreign Aid",
+            Action.COUP:           "Coup",
+            Action.TAX:            "Tax",
+            Action.ASSASSINATE:    "Assassinate",
+            Action.STEAL:          "Steal",
+            Action.SWAP:           "Swap",
+        } [self]
+
+    def __repr__(self):
+        return self.__str__()
+
+class Player:
+    def __init__(self, name, id):
+        self.name = name
+        self.honest = True
+        self.money = 2
+        self.influence = []
+        self.id = id
+
+    def alive(self):
+        lives = map(Influence.hidden, self.influence)
+        # the player is alive if any role is still hidden
+        return any(lives)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        r = "{} ({}): {}" \
+            .format(self.name,
+                    self.money,
+                    ", ".join(map(str, self.influence)))
+
+        if not self.alive():
+            r = "~~ {} ~~".format(r)
+
+        r = "{{{}}} {}".format(self.id, r)
+
+        return r

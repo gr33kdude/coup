@@ -1,62 +1,38 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import game
 from core import Player
 
-import random
-from math import ceil, log10
-import os
-
-# options : [ opts, ... ]
-# question : string
-def choose(options, question):
-    max_digits = int(ceil(log10(len(options)+1)))
-    for i, opt in enumerate(options):
-        print "{:{}}: {}".format(i + 1, max_digits, opt)
-
-    print
-
-    selection = None
-    while selection == None:
-        inp = raw_input(question + "  ")
-
-        # handle invalid input, determine which option
-        try:
-            selection = int(inp) - 1
-            if not 0 <= selection < len(options):
-                raise Exception()
-        except Exception:
-            print "Invalid input, please try again."
-            selection = None
-            continue
-
-    return options[selection]
-
-def challenge(players, player):
-    for other in players:
-        if player == other:
-            continue
-
-        challenge_inp = None
-        while True:
-            challenge_inp = raw_input("{}, would you like to challenge? (y/n) ".format(other))
-            if challenge_inp == 'y':
-                return other
-            elif challenge_inp == 'n':
-                break
-            else:
-                print "Invalid input, please try again"
+import argparse
 
 def main():
-    players = []
-    player_names = [ "Costas", "Cam", "Jeff" ]
-    for i, name in enumerate(player_names):
-        players.append( Player(name, i + 1) )
+    # Parse arguments
 
-    g = game.Game()
-    map(g.add, players)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--players', '-p', type=int, default=3)
+    parser.add_argument('--log', '-l', action='store_true')
+    parser.add_argument('--replay', '-r', action='store_true')
 
-    return g.start()
+    args = parser.parse_args()
+
+    player_names = [ "Costas", "Cam", "Jeff", "Evan", "Alex" ]
+
+    if not 3 <= args.players <= 5:
+        print("Invalid number of players requested ({}); " + \
+              "must be between 3 and 5 inclusive".format(args.players))
+        sys.exit(1)
+    assert 3 <= len(player_names) <= 5
+
+    players = [ Player(name, i + 1) for i, name in enumerate(player_names[:args.players]) ]
+
+    g = game.Game(args.log, args.replay)
+    success = map(g.add, players)
+    assert all(success)
+
+    try:
+        g.start()
+    except KeyboardInterrupt:
+        print()
 
 if __name__ == "__main__":
     main()
