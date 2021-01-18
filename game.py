@@ -69,8 +69,7 @@ class Game:
     # players in a game should be represented using an ID that does not change
     # 
     def start(self):
-        if not 2 <= len(self.players) <= 6:
-            print "Invalid number of players ({})! Game only supports between 2-6 players.".format(len(self.players))
+        if not 3 <= len(self.players) <= 6:
             return False
 
         print "Welcome to Coup!!"
@@ -82,12 +81,14 @@ class Game:
         while not self.game_over:
             alive = filter(Player.alive, self.players)
 
-            if len(alive) <= 1:
-                self.game_over = True
-                continue
+            assert len(alive) >= 1
 
             if not self.current.alive():
                 self.next_player()
+                continue
+
+            if len(alive) == 1:
+                self.game_over = True
                 continue
 
             self.prepare_player(self.current)
